@@ -1,0 +1,18 @@
+# .github/release-gate.toml: copy to a target repository and edit.
+# The gate reads this file from the repository's default branch only.
+
+# Author and committer addresses allowed on every commit (all refs).
+allowed_emails = [
+  "OWNER-ID+HANDLE@users.noreply.github.com",
+  "noreply@github.com",
+]
+
+# An address allowed only on the listed full commit ids.
+# [[exceptions]]
+# email = "someone@noreply.example"
+# commits = ["0123456789abcdef0123456789abcdef01234567"]
+
+# Optional. Run only by the publish workflow, never by the scheduled gate,
+# because they execute the repository's own build code.
+# build = "python -m build"
+# smoke = ["mytool --help"]

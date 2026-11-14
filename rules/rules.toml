@@ -1,0 +1,26 @@
+# Rules applied to every target repository by tools/apply_rules.py.
+# App ids and the owner id are arguments, never stored here.
+
+[main_ruleset]
+name = "release-gate main"
+branch = "~DEFAULT_BRANCH"        # the default branch
+required_check = "release-gate"   # must come from the gate App
+require_pull_request = true
+approvals = 0                     # the gate check is the control; raise for teams
+block_force_push = true
+block_deletion = true
+# Owner bypass: the repository Admin role (the owner of a personal repository).
+bypass_role_id = 5
+
+[tag_ruleset]
+name = "release-gate v* tags"
+pattern = "refs/tags/v*"
+block_update = true
+block_deletion = true
+# Creation stays open: agents may create v* tags (owner ruling 2026-11-14).
+
+[environment]
+name = "pypi"
+tag_pattern = "v*"
+owner_is_reviewer = true
+prevent_self_review = true

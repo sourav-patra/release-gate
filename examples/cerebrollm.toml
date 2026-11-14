@@ -1,0 +1,13 @@
+allowed_emails = [
+  "61248036+sourav-patra@users.noreply.github.com",
+  "noreply@github.com",
+  "noreply@anthropic.com",
+]
+
+# noreply@anthropic.com is allowed on this one historical commit only.
+[[exceptions]]
+email = "noreply@anthropic.com"
+commits = ["6ff229626d2215033ef705007fc818a3efeff8a9"]
+
+build = "python -m build"
+smoke = ["cerebrollm --help"]
