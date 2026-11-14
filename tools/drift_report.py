@@ -42,6 +42,10 @@ def diff_ruleset(exp, live):
     inc = live.get("conditions", {}).get("ref_name", {}).get("include", [])
     if sorted(inc) != sorted(want_inc):
         out.append("%s: ref include %r, expected %r" % (n, inc, want_inc))
+    want_exc = exp["conditions"]["ref_name"].get("exclude", [])
+    exc = live.get("conditions", {}).get("ref_name", {}).get("exclude", [])
+    if sorted(exc) != sorted(want_exc):
+        out.append("%s: ref exclude %r, expected %r" % (n, exc, want_exc))
     e, l = rule_map(exp["rules"]), rule_map(live.get("rules", []))
     for t in sorted(set(e) - set(l)):
         out.append("%s: missing rule %s" % (n, t))
@@ -72,8 +76,9 @@ def diff_environment(exp, live):
     if live.get("deployment_branch_policy", {}).get("custom_branch_policies") != want_custom:
         out.append("environment: custom branch policies differ")
     rr = [r for r in live.get("protection_rules", []) if r.get("type") == "required_reviewers"]
-    want_ids = sorted(r["id"] for r in exp["reviewers"])
-    have_ids = sorted(x["reviewer"]["id"] for r in rr for x in r.get("reviewers", []))
+    want_ids = sorted((r["type"], r["id"]) for r in exp["reviewers"])
+    have_ids = sorted((x.get("type"), x["reviewer"]["id"])
+                      for r in rr for x in r.get("reviewers", []))
     if want_ids != have_ids:
         out.append("environment: reviewers %s, expected %s" % (have_ids, want_ids))
     live_self = bool(rr and rr[0].get("prevent_self_review"))
@@ -83,7 +88,8 @@ def diff_environment(exp, live):
     return out
 
 
-def report(repo, gate_app_id, owner_id, rules_path, get=fetch):
+def report(repo, gate_app_id, owner_id, rules_path, get=None):
+    get = get or fetch  # resolved at call time so tests can replace fetch
     with open(rules_path, "rb") as f:
         rules = tomllib.load(f)
     (_, _, main_p), (_, _, tag_p), (_, _, env_p), (_, _, pol_p) = apply_rules.build_calls(
@@ -104,8 +110,10 @@ def report(repo, gate_app_id, owner_id, rules_path, get=fetch):
     out += diff_environment(env_p, live_env)
     pols = get("/repos/%s/environments/%s/deployment-branch-policies" % (repo, env_name))
     have = {(p["name"], p.get("type")) for p in pols.get("branch_policies", [])}
-    if (pol_p["name"], pol_p["type"]) not in have:
-        out.append("environment: deployment policy %s %r missing" % (pol_p["type"], pol_p["name"]))
+    want = {(pol_p["name"], pol_p["type"])}
+    if have != want:
+        out.append("environment: deployment policies %s, expected %s"
+                   % (sorted(have, key=str), sorted(want, key=str)))
     return out
 
 

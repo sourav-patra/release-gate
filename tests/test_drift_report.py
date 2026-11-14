@@ -98,3 +98,33 @@ def test_main_never_writes(monkeypatch):
     monkeypatch.setattr(drift_report.subprocess, "run", spy)
     drift_report.main(["--repo", "o/r", "--gate-app-id", "1", "--owner-id", "2"])
     assert seen and all("GET" in a for a in seen)
+
+
+def test_excluding_the_protected_branch_is_drift():
+    w = good_world()
+    w[PATH + "/rulesets/1"]["conditions"]["ref_name"]["exclude"] = ["refs/heads/main"]
+    assert any("ref exclude" in d for d in run(w))
+
+
+def test_extra_deployment_policy_is_drift():
+    w = good_world()
+    w[PATH + "/environments/pypi/deployment-branch-policies"]["branch_policies"].append(
+        {"name": "*", "type": "branch"})
+    assert any("deployment policies" in d for d in run(w))
+
+
+def test_reviewer_type_substitution_is_drift():
+    w = good_world()
+    w[PATH + "/environments/pypi"]["protection_rules"][0]["reviewers"][0]["type"] = "Team"
+    assert any("reviewers" in d for d in run(w))
+
+
+def test_main_uses_replaced_fetch_and_never_reaches_gh(monkeypatch):
+    called = []
+
+    def fake_fetch(path):
+        called.append(path)
+        raise RuntimeError("x")
+    monkeypatch.setattr(drift_report, "fetch", fake_fetch)
+    assert drift_report.main(["--repo", "o/r", "--gate-app-id", "1", "--owner-id", "2"]) == 2
+    assert called == ["/repos/o/r/rulesets"]
