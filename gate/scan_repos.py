@@ -62,7 +62,12 @@ def config_text(repo, token):
 
 
 def has_check(repo, sha, token):
-    data = api("GET", "/repos/%s/commits/%s/check-runs?check_name=%s" % (repo, sha, CHECK), token)
+    # Only a completed check from the gate App counts; the App id comes from
+    # the environment when set (it is an identifier, not a secret).
+    q = "check_name=%s&status=completed" % CHECK
+    if os.environ.get("GATE_APP_ID"):
+        q += "&app_id=" + os.environ["GATE_APP_ID"]
+    data = api("GET", "/repos/%s/commits/%s/check-runs?%s" % (repo, sha, q), token)
     return data["total_count"] > 0
 
 

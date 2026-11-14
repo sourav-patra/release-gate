@@ -4,17 +4,57 @@ Checks: gitleaks, identity, needles, and (only with --run-build) the build
 and smoke steps named in the config. The build step runs the target's own
 build backend, so the scheduled gate never passes --run-build; the publish
 workflow does, on a tagged commit.
+Raw gitleaks output is never shown: only file paths and counts.
 Exit non-zero if any check fails.
 """
 import argparse
+import json
 import os
 import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from safe import sanitize_path  # noqa: E402
+
+
+def gitleaks_summary(gl, target, needles):
+    """Run gitleaks; return (ok, text) built from its JSON report."""
+    with tempfile.TemporaryDirectory() as tmp:
+        report = os.path.join(tmp, "r.json")
+        p = subprocess.run([gl, "dir", target, "--redact", "--no-banner",
+                            "--report-format", "json", "--report-path", report],
+                           capture_output=True, text=True)
+        if p.returncode == 0:
+            return True, "no leaks found"
+        if p.returncode != 1:
+            return False, "gitleaks error (exit %d)" % p.returncode
+        try:
+            with open(report, encoding="utf-8") as f:
+                findings = json.load(f)
+        except (OSError, ValueError):
+            return False, "gitleaks reported leaks; report unreadable"
+    counts = {}
+    for item in findings:
+        name = item.get("File", "")
+        rel = os.path.relpath(name, target).replace(os.sep, "/") if name else "?"
+        counts[rel] = counts.get(rel, 0) + 1
+    lines = ["%s %d" % (sanitize_path(r, needles), c) for r, c in sorted(counts.items())]
+    lines.append("total %d in %d file(s)" % (len(findings), len(counts)))
+    return False, "\n".join(lines)
+
+
+def read_needles(path):
+    try:
+        with open(path, "rb") as f:
+            raw = f.read().decode("utf-8", "replace").split("\n")
+    except OSError:
+        return []
+    return [n.rstrip("\r") for n in raw if n.rstrip("\r")]
 
 
 def run(cmd, cwd=None):
@@ -39,8 +79,8 @@ def main(argv=None):
     results = []  # (name, ok, text)
 
     if gl:
-        rc, out = run([gl, "dir", a.target, "--redact", "--no-banner"])
-        results.append(("gitleaks", rc == 0, out[-4000:]))
+        ok, text = gitleaks_summary(gl, a.target, read_needles(a.needles))
+        results.append(("gitleaks", ok, text))
     else:
         results.append(("gitleaks", False, "gitleaks binary not found"))
 

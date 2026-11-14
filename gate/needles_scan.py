@@ -12,6 +12,9 @@ import argparse
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from safe import sanitize_path  # noqa: E402
+
 
 def read_lines(path):
     with open(path, "rb") as f:
@@ -66,7 +69,7 @@ def main(argv=None):
         print("error: " + type(e).__name__)
         return 2
     for rel in sorted(results):
-        print("%s %d" % (rel, results[rel]))
+        print("%s %d" % (sanitize_path(rel, needles), results[rel]))
     total = sum(results.values())
     print("total %d in %d file(s)" % (total, len(results)))
     return 1 if total else 0

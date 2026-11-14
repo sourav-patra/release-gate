@@ -24,16 +24,19 @@ def load_config(path):
 
 def addresses_by_commit(repo):
     out = subprocess.run(
-        ["git", "-C", repo, "log", "--all", "--format=%H %ae %ce"],
+        ["git", "-C", repo, "log", "--all", "--format=%H%x09%ae%x09%ce"],
         capture_output=True, text=True,
     )
     if out.returncode != 0:
         raise RuntimeError("git log failed")
     rows = []
     for line in out.stdout.splitlines():
-        parts = line.split()
-        if len(parts) == 3:
-            rows.append((parts[0], parts[1], parts[2]))
+        parts = line.split("	")
+        if len(parts) != 3 or not all(parts):
+            raise RuntimeError("malformed commit record")  # fail closed
+        rows.append((parts[0], parts[1], parts[2]))
+    if not rows:
+        raise RuntimeError("no commits found")  # an empty history is not a pass
     return rows
 
 
