@@ -146,12 +146,12 @@ def main(argv=None):
                 try:
                     res = gate_one(repo, sha, cfg, token, needles, accepted, os.path.join(tmp, "t"))
                 except Exception as e:  # never print content, only the type
-                    print("%s %s: error %s" % (repo, sha[:12], type(e).__name__))
+                    print("%s %s: error %s" % (repo, sha[:12], type(e).__name__), flush=True)
                     failed += 1
                     continue
             rc, text = res
             post(repo, sha, rc == 0, text, token)
-            print("%s %s (%s): %s" % (repo, sha[:12], label, "pass" if rc == 0 else "FAIL"))
+            print("%s %s (%s): %s" % (repo, sha[:12], label, "pass" if rc == 0 else "FAIL"), flush=True)
     return 1 if failed else 0
 
 
