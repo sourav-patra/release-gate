@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 
 API = "https://api.github.com"
@@ -42,6 +43,22 @@ def paged(path, token, key=None):
         if len(items) < 100:
             return out
         page += 1
+
+
+def config_text(repo, token):
+    """The repository's gate config from its default branch, or None (not opted in)."""
+    req = urllib.request.Request(
+        "%s/repos/%s/contents/%s" % (API, repo, CONFIG_PATH),
+        headers={"Authorization": "Bearer " + token,
+                 "Accept": "application/vnd.github.raw+json",
+                 "X-GitHub-Api-Version": "2022-11-28"})
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
 
 
 def has_check(repo, sha, token):
@@ -75,17 +92,12 @@ def git(args, cwd, token):
     return p.stdout
 
 
-def gate_one(repo, sha, token, needles, accepted, workdir):
+def gate_one(repo, sha, cfg_text, token, needles, accepted, workdir):
     url = "https://github.com/%s.git" % repo
     git(["init", "-q", workdir], None, token)
     git(["remote", "add", "origin", url], workdir, token)
     git(["fetch", "-q", "origin", "+refs/heads/*:refs/remotes/origin/*",
          "+refs/tags/*:refs/tags/*", "+refs/pull/*/head:refs/remotes/pull/*"], workdir, token)
-    default = api("GET", "/repos/" + repo, token)["default_branch"]
-    try:
-        cfg_text = git(["show", "origin/%s:%s" % (default, CONFIG_PATH)], workdir, token)
-    except RuntimeError:
-        return None  # repository has not opted in
     git(["checkout", "-q", "--detach", sha], workdir, token)
     cfg = os.path.join(os.path.dirname(workdir), "release-gate.toml")
     with open(cfg, "w") as f:
@@ -114,23 +126,29 @@ def main(argv=None):
     token = os.environ["GH_TOKEN"]
     needles, accepted = os.environ["NEEDLES_FILE"], os.environ["ACCEPTED_FILE"]
     if a.repo and a.sha:
-        work = [(a.repo, [(a.sha, "manual")])]
+        work = [(a.repo, config_text(a.repo, token), [(a.sha, "manual")])]
     else:
         repos = [r["full_name"] for r in paged("/installation/repositories", token, "repositories")]
-        work = [(r, pending(r, token)) for r in repos]
+        work = []
+        for r in repos:
+            cfg = config_text(r, token)
+            if cfg is None:
+                continue  # not opted in: nothing is cloned or scanned
+            work.append((r, cfg, pending(r, token)))
+        print("%d installed, %d opted in" % (len(repos), len(work)), flush=True)
     failed = 0
-    for repo, items in work:
+    for repo, cfg, items in work:
+        if cfg is None:
+            print("%s: no config, skipped" % repo, flush=True)
+            continue
         for sha, label in items:
             with tempfile.TemporaryDirectory() as tmp:
                 try:
-                    res = gate_one(repo, sha, token, needles, accepted, os.path.join(tmp, "t"))
+                    res = gate_one(repo, sha, cfg, token, needles, accepted, os.path.join(tmp, "t"))
                 except Exception as e:  # never print content, only the type
                     print("%s %s: error %s" % (repo, sha[:12], type(e).__name__))
                     failed += 1
                     continue
-            if res is None:
-                print("%s %s: no config, skipped" % (repo, sha[:12]))
-                continue
             rc, text = res
             post(repo, sha, rc == 0, text, token)
             print("%s %s (%s): %s" % (repo, sha[:12], label, "pass" if rc == 0 else "FAIL"))

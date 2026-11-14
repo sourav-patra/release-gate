@@ -67,7 +67,7 @@ jobs:
           IN_REPO: ${{ inputs.repo }}
           IN_SHA: ${{ inputs.sha }}
         run: |
-          python3 gate/scan_repos.py --repo "$IN_REPO" --sha "$IN_SHA"
+          python3 -u gate/scan_repos.py --repo "$IN_REPO" --sha "$IN_SHA"
 
       - name: Remove private lists
         if: always()
