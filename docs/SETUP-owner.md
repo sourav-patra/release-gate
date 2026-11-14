@@ -2,6 +2,21 @@
 
 Run each step in Windows PowerShell. Steps marked (browser) happen on github.com. Replace `OWNER` with your GitHub handle and `TARGET` with a repository name.
 
+## Status (2026-11-15)
+
+| Item | State |
+|---|---|
+| Public repository `sourav-patra/release-gate` | done |
+| Gate App `agent-release-gate`, App ID 5761244 (Checks write, Contents read, Pull requests read, Metadata read), installed on all repositories | done |
+| Agent App `sourav-patra-agent`, App ID 5761264 (Actions, Contents, Pull requests write, Metadata read), installed on all repositories, no private key yet | done |
+| Environment `needles` limited to branch `main`; secrets `NEEDLES`, `GATE_APP_ID`, `GATE_APP_KEY` | done |
+| Secret `ACCEPTED` | placeholder only: every private-name match fails until you add accepted lines |
+| Delete the gate App `.pem` from the Downloads folder | open |
+| Take your own GitHub credential away from agents (`gh auth logout`, step 6) | open |
+| Apply rules to each target repository (`apply_rules.py --apply`) | open |
+| PyPI trusted publisher naming environment `pypi` | open |
+| First real scan of a repository (needs its `.github/release-gate.toml`) | open |
+
 ## One time
 
 1. Create the public repository and push this folder (needs `gh` signed in as you):
@@ -11,9 +26,9 @@ Run each step in Windows PowerShell. Steps marked (browser) happen on github.com
    gh repo create OWNER/release-gate --public --source . --remote origin --push
    ```
 
-2. (browser) Settings > Developer settings > GitHub Apps > New. Create the **gate App** with these repository permissions and nothing else: Contents read, Checks write, Pull requests read, Metadata read. No webhook. Note its App ID and slug, generate a private key (a `.pem` download), and install it on all repositories.
+2. (browser) Settings > Developer settings > GitHub Apps > New. Create the **gate App** (registered as `agent-release-gate`) with these repository permissions and nothing else: Contents read, Checks write, Pull requests read, Metadata read. No webhook. Note its App ID and slug, generate a private key (a `.pem` download), and install it on all repositories.
 
-3. (browser) Create the **agent App**: Contents write, Pull requests write, Actions write, Metadata read. Nothing else: no Workflows, Administration, Environments, Secrets or Deployments. Install it on the repositories agents work in. Agents mint their tokens from this App, never from your own login.
+3. (browser) Create the **agent App** (registered as `sourav-patra-agent`): Contents write, Pull requests write, Actions write, Metadata read. Nothing else: no Workflows, Administration, Environments, Secrets or Deployments. Install it on the repositories agents work in. Agents mint their tokens from this App, never from your own login.
 
 4. (browser) release-gate repository > Settings > Environments > New environment `needles`. Deployment branches: selected branches, `main`. Add these environment secrets:
 
