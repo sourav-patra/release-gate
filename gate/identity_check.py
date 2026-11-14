@@ -18,6 +18,10 @@ def load_config(path):
     allowed = set(cfg.get("allowed_emails", []))
     exceptions = {}
     for ex in cfg.get("exceptions", []):
+        extra = set(ex) - {"email", "commits"}
+        if extra:
+            # Usually a top-level key (build, smoke) written below the table.
+            raise ValueError("exceptions entry has unexpected keys")
         exceptions.setdefault(ex["email"], set()).update(ex.get("commits", []))
     return allowed, exceptions
 
@@ -52,7 +56,7 @@ def main(argv=None):
     try:
         allowed, exceptions = load_config(args.config)
         rows = addresses_by_commit(args.repo)
-    except (OSError, RuntimeError, tomllib.TOMLDecodeError, KeyError) as e:
+    except (OSError, RuntimeError, ValueError, tomllib.TOMLDecodeError, KeyError) as e:
         print("error: " + type(e).__name__)
         return 2
     seen = set()
