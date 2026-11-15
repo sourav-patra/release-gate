@@ -49,3 +49,60 @@ def test_run_gate_exits_2_when_needles_unreadable(tmp_path, monkeypatch):
                         "--accepted", str(tmp_path / "missing"),
                         "--summary", str(tmp_path / "s.md")])
     assert rc == 2
+
+
+def test_fallback_label_never_contains_a_needle():
+    out = safe.sanitize_path("file.txt", ["file"])
+    assert "file" not in out
+    out = safe.sanitize_path("x/zebrafish", ["zebrafish", "file-", "0", "1", "2", "3", "4", "5", "6",
+                                              "7", "8", "9", "a", "b", "c", "d", "e", "f"])
+    assert out == ""
+
+
+def test_guard_text_replaces_text_holding_a_needle():
+    assert safe.guard_text("fine", ["zebra"]) == ("fine", False)
+    assert safe.guard_text("has zebra", ["zebra"]) == ("output withheld", True)
+    assert safe.guard_text("has zebra", ["zebra", "withheld"]) == ("", True)
+
+
+def test_summary_with_generated_text_matching_a_needle_is_withheld(tmp_path, monkeypatch):
+    # needle "total" equals words the gate itself prints, so the summary is replaced
+    needles = tmp_path / "n.txt"
+    needles.write_text("total\n")
+    empty = tmp_path / "a.txt"
+    empty.write_text("")
+    cfg = tmp_path / "c.toml"
+    cfg.write_text("")
+
+    def fake_run(cmd, **kw):
+        if "--report-path" in cmd:
+            report = cmd[cmd.index("--report-path") + 1]
+            with open(report, "w") as f:
+                f.write('[{"File": "%s/x.txt"}]' % str(tmp_path).replace("\\", "/"))
+            return subprocess.CompletedProcess(cmd, 1, "", "")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(run_gate.subprocess, "run", fake_run)
+    out = tmp_path / "s.md"
+    rc = run_gate.main(["--target", str(tmp_path), "--config", str(cfg), "--needles", str(needles),
+                        "--accepted", str(empty), "--gitleaks", "gl", "--summary", str(out)])
+    text = out.read_text(encoding="utf-8")
+    assert rc == 1 and "total" not in text and text == "output withheld"
+
+
+def test_empty_needles_with_gitleaks_enabled_exits_2_and_shows_no_path(tmp_path, monkeypatch):
+    needles = tmp_path / "n.txt"
+    needles.write_text("\n")
+    cfg = tmp_path / "c.toml"
+    cfg.write_text("")
+
+    def fake_run(cmd, **kw):
+        report = cmd[cmd.index("--report-path") + 1] if "--report-path" in cmd else None
+        if report:
+            with open(report, "w") as f:
+                f.write('[{"File": "%s/secret-name.txt"}]' % str(tmp_path).replace("\\", "/"))
+        return subprocess.CompletedProcess(cmd, 1 if report else 0, "", "")
+    monkeypatch.setattr(run_gate.subprocess, "run", fake_run)
+    out = tmp_path / "s.md"
+    rc = run_gate.main(["--target", str(tmp_path), "--config", str(cfg), "--needles", str(needles),
+                        "--accepted", str(needles), "--gitleaks", "gl", "--summary", str(out)])
+    assert rc == 2 and "secret-name" not in out.read_text(encoding="utf-8")

@@ -19,7 +19,7 @@ import tomllib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from safe import sanitize_path  # noqa: E402
+from safe import guard_text, sanitize_path  # noqa: E402
 
 
 def gitleaks_summary(gl, target, needles):
@@ -119,6 +119,9 @@ def main(argv=None):
     for name, ok, text in results:
         lines += ["## %s: %s" % (name, "pass" if ok else "FAIL"), "", "```", text, "```", ""]
     md = "\n".join(lines)
+    withheld = False
+    if needles:
+        md, withheld = guard_text(md, needles)  # nothing published may hold a needle
     if a.summary:
         with open(a.summary, "w", encoding="utf-8") as f:
             f.write(md)
@@ -126,6 +129,8 @@ def main(argv=None):
         print(md)
     if needles is None:
         return 2  # same code the needles scan uses for an unusable list
+    if withheld:
+        return 1  # fail closed: the summary held private text and was replaced
     return 0 if all(ok for _, ok, _ in results) else 1
 
 
