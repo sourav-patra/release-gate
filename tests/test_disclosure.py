@@ -106,3 +106,39 @@ def test_empty_needles_with_gitleaks_enabled_exits_2_and_shows_no_path(tmp_path,
     rc = run_gate.main(["--target", str(tmp_path), "--config", str(cfg), "--needles", str(needles),
                         "--accepted", str(needles), "--gitleaks", "gl", "--summary", str(out)])
     assert rc == 2 and "secret-name" not in out.read_text(encoding="utf-8")
+
+
+def _scan(tmp_path, needles, files):
+    t = tmp_path / "t"
+    t.mkdir()
+    for name, body in files.items():
+        (t / name).write_text(body)
+    n, a = tmp_path / "n.txt", tmp_path / "a.txt"
+    n.write_text(needles)
+    a.write_text("")
+    return subprocess.run([sys.executable, os.path.join(ROOT, "gate", "needles_scan.py"),
+                           "--target", str(t), "--needles", str(n), "--accepted", str(a)],
+                          capture_output=True, text=True)
+
+
+def test_scanner_count_cannot_form_a_needle(tmp_path):
+    r = _scan(tmp_path, "note.txt 1\nzebra\n", {"note.txt": "zebra\n"})
+    assert "note.txt 1" not in r.stdout + r.stderr
+    assert r.returncode == 1
+
+
+def test_scanner_boilerplate_word_matching_a_needle_is_withheld(tmp_path):
+    r = _scan(tmp_path, "total\nzebra\n", {"ok.txt": "zebra\n"})
+    assert "total" not in r.stdout and r.returncode == 1
+
+
+def test_unusable_list_runs_no_other_check_and_publishes_a_fixed_notice(tmp_path, monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("no subprocess may run when the private list is unusable")
+    monkeypatch.setattr(run_gate.subprocess, "run", boom)
+    out = tmp_path / "s.md"
+    rc = run_gate.main(["--target", str(tmp_path), "--config", str(tmp_path / "c.toml"),
+                        "--needles", str(tmp_path / "missing"), "--accepted", str(tmp_path / "missing"),
+                        "--gitleaks", "gl", "--run-build", "--summary", str(out)])
+    assert rc == 2
+    assert "unreadable or empty" in out.read_text(encoding="utf-8")

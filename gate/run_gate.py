@@ -83,6 +83,16 @@ def main(argv=None):
     results = []  # (name, ok, text)
 
     needles = read_needles(a.needles)
+    if needles is None:
+        # Unusable private list: collect nothing from the repository, publish a
+        # fixed notice (no repository text), and fail with the scan's error code.
+        notice = "# release-gate\n\nFAIL: the private list is unreadable or empty; no checks were run.\n"
+        if a.summary:
+            with open(a.summary, "w", encoding="utf-8") as f:
+                f.write(notice)
+        else:
+            print(notice)
+        return 2
     if gl:
         ok, text = gitleaks_summary(gl, a.target, needles)
         results.append(("gitleaks", ok, text))
@@ -119,16 +129,12 @@ def main(argv=None):
     for name, ok, text in results:
         lines += ["## %s: %s" % (name, "pass" if ok else "FAIL"), "", "```", text, "```", ""]
     md = "\n".join(lines)
-    withheld = False
-    if needles:
-        md, withheld = guard_text(md, needles)  # nothing published may hold a needle
+    md, withheld = guard_text(md, needles)  # nothing published may hold a needle
     if a.summary:
         with open(a.summary, "w", encoding="utf-8") as f:
             f.write(md)
     else:
         print(md)
-    if needles is None:
-        return 2  # same code the needles scan uses for an unusable list
     if withheld:
         return 1  # fail closed: the summary held private text and was replaced
     return 0 if all(ok for _, ok, _ in results) else 1
