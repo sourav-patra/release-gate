@@ -1,5 +1,7 @@
 # .github/release-gate.toml: copy to a target repository and edit.
 # The gate reads this file from the repository's default branch only.
+# WARNING: write build and smoke ABOVE any [[exceptions]] table; keys written
+# below a table header belong to that table and are rejected by the gate.
 
 # Author and committer addresses allowed on every commit (all refs).
 allowed_emails = [

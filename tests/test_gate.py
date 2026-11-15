@@ -156,3 +156,19 @@ def test_config_examples_parse():
     for name in ("release-gate.toml", "cerebrollm.toml"):
         with open(os.path.join(ROOT, "examples", name), "rb") as f:
             assert "allowed_emails" in tomllib.load(f)
+
+
+def test_exceptions_entry_with_extra_keys_is_a_config_error(repo, tmp_path):
+    commit(repo, OK)
+    p = tmp_path / "bad.toml"
+    p.write_text('allowed_emails = ["%s"]\n[[exceptions]]\nemail = "%s"\ncommits = []\n'
+                 'build = "python -m build"\n' % (OK, BOT))
+    r = py("gate/identity_check.py", "--repo", str(repo), "--config", str(p))
+    assert r.returncode == 2
+
+
+def test_cerebrollm_example_keeps_build_and_smoke_top_level():
+    with open(os.path.join(ROOT, "examples", "cerebrollm.toml"), "rb") as f:
+        cfg = tomllib.load(f)
+    assert cfg["build"] == "python -m build" and cfg["smoke"] == ["cerebrollm --help"]
+    assert set(cfg["exceptions"][0]) == {"email", "commits"}

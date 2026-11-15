@@ -4,10 +4,12 @@ allowed_emails = [
   "noreply@anthropic.com",
 ]
 
+# Top-level keys must stay above every [[exceptions]] table: TOML puts any
+# key written after a table header inside that table.
+build = "python -m build"
+smoke = ["cerebrollm --help"]
+
 # noreply@anthropic.com is allowed on this one historical commit only.
 [[exceptions]]
 email = "noreply@anthropic.com"
 commits = ["6ff229626d2215033ef705007fc818a3efeff8a9"]
-
-build = "python -m build"
-smoke = ["cerebrollm --help"]
