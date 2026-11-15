@@ -39,13 +39,13 @@ Run each step in Windows PowerShell. Steps marked (browser) happen on github.com
    | `GATE_APP_ID` | the gate App ID |
    | `GATE_APP_KEY` | the full text of the gate App `.pem` |
 
-   From PowerShell, if you prefer (the file paths are yours; no agent reads them):
+   From Windows PowerShell, if you prefer (the file paths are yours; no agent reads them). PowerShell has no `<` redirection, so the file commands run through `cmd /c`, which passes the file bytes unchanged:
 
    ```powershell
-   gh secret set NEEDLES   --env needles --repo OWNER/release-gate < "<path to your needles file>"
-   gh secret set ACCEPTED  --env needles --repo OWNER/release-gate < "<path to your accepted file>"
-   gh secret set GATE_APP_ID  --env needles --repo OWNER/release-gate --body "<gate App ID>"
-   gh secret set GATE_APP_KEY --env needles --repo OWNER/release-gate < "<path to the .pem>"
+   cmd /c 'gh secret set NEEDLES --env needles --repo OWNER/release-gate < "<path to your needles file>"'
+   cmd /c 'gh secret set ACCEPTED --env needles --repo OWNER/release-gate < "<path to your accepted file>"'
+   gh secret set GATE_APP_ID --env needles --repo OWNER/release-gate --body "<gate App ID>"
+   cmd /c 'gh secret set GATE_APP_KEY --env needles --repo OWNER/release-gate < "<path to the .pem>"'
    ```
 
    You alone edit `ACCEPTED`: rerun the `ACCEPTED` command to change it.
