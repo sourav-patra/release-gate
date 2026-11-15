@@ -4,17 +4,61 @@ Checks: gitleaks, identity, needles, and (only with --run-build) the build
 and smoke steps named in the config. The build step runs the target's own
 build backend, so the scheduled gate never passes --run-build; the publish
 workflow does, on a tagged commit.
+Raw gitleaks output is never shown: only file paths and counts.
 Exit non-zero if any check fails.
 """
 import argparse
+import json
 import os
 import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from safe import guard_text, sanitize_path  # noqa: E402
+
+
+def gitleaks_summary(gl, target, needles):
+    """Run gitleaks; return (ok, text) built from its JSON report."""
+    with tempfile.TemporaryDirectory() as tmp:
+        report = os.path.join(tmp, "r.json")
+        p = subprocess.run([gl, "dir", target, "--redact", "--no-banner",
+                            "--report-format", "json", "--report-path", report],
+                           capture_output=True, text=True)
+        if p.returncode == 0:
+            return True, "no leaks found"
+        if p.returncode != 1:
+            return False, "gitleaks error (exit %d)" % p.returncode
+        try:
+            with open(report, encoding="utf-8") as f:
+                findings = json.load(f)
+        except (OSError, ValueError):
+            return False, "gitleaks reported leaks; report unreadable"
+    counts = {}
+    for item in findings:
+        name = item.get("File", "")
+        rel = os.path.relpath(name, target).replace(os.sep, "/") if name else "?"
+        counts[rel] = counts.get(rel, 0) + 1
+    if needles is None:  # private list unreadable: no path is safe to show
+        lines = []
+    else:
+        lines = ["%s %d" % (sanitize_path(r, needles), c) for r, c in sorted(counts.items())]
+    lines.append("total %d in %d file(s)" % (len(findings), len(counts)))
+    return False, "\n".join(lines)
+
+
+def read_needles(path):
+    try:
+        with open(path, "rb") as f:
+            raw = f.read().decode("utf-8", "replace").split("\n")
+    except OSError:
+        return None
+    needles = [n.rstrip("\r") for n in raw if n.rstrip("\r")]
+    return needles or None  # unreadable or empty is an error, never "no needles"
 
 
 def run(cmd, cwd=None):
@@ -38,9 +82,20 @@ def main(argv=None):
     gl = a.gitleaks or shutil.which("gitleaks")
     results = []  # (name, ok, text)
 
+    needles = read_needles(a.needles)
+    if needles is None:
+        # Unusable private list: collect nothing from the repository, publish a
+        # fixed notice (no repository text), and fail with the scan's error code.
+        notice = "# release-gate\n\nFAIL: the private list is unreadable or empty; no checks were run.\n"
+        if a.summary:
+            with open(a.summary, "w", encoding="utf-8") as f:
+                f.write(notice)
+        else:
+            print(notice)
+        return 2
     if gl:
-        rc, out = run([gl, "dir", a.target, "--redact", "--no-banner"])
-        results.append(("gitleaks", rc == 0, out[-4000:]))
+        ok, text = gitleaks_summary(gl, a.target, needles)
+        results.append(("gitleaks", ok, text))
     else:
         results.append(("gitleaks", False, "gitleaks binary not found"))
 
@@ -74,11 +129,14 @@ def main(argv=None):
     for name, ok, text in results:
         lines += ["## %s: %s" % (name, "pass" if ok else "FAIL"), "", "```", text, "```", ""]
     md = "\n".join(lines)
+    md, withheld = guard_text(md, needles)  # nothing published may hold a needle
     if a.summary:
         with open(a.summary, "w", encoding="utf-8") as f:
             f.write(md)
     else:
         print(md)
+    if withheld:
+        return 1  # fail closed: the summary held private text and was replaced
     return 0 if all(ok for _, ok, _ in results) else 1
 
 

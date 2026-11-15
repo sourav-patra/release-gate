@@ -12,6 +12,9 @@ import argparse
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from safe import guard_text, sanitize_path  # noqa: E402
+
 
 def read_lines(path):
     with open(path, "rb") as f:
@@ -65,10 +68,14 @@ def main(argv=None):
     except OSError as e:
         print("error: " + type(e).__name__)
         return 2
-    for rel in sorted(results):
-        print("%s %d" % (rel, results[rel]))
     total = sum(results.values())
-    print("total %d in %d file(s)" % (total, len(results)))
+    lines = ["%s %d" % (sanitize_path(rel, needles), results[rel]) for rel in sorted(results)]
+    lines.append("total %d in %d file(s)" % (total, len(results)))
+    # Names, counts and boilerplate can together form a needle: check the whole output.
+    text, withheld = guard_text("\n".join(lines), needles)
+    print(text)
+    if withheld:
+        return 1  # fail closed even when the scan itself found nothing
     return 1 if total else 0
 
 
