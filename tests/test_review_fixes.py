@@ -20,7 +20,7 @@ def test_sanitize_path_hides_needles_and_markup():
     out = safe.sanitize_path("dir/zebrafish-notes`\n```x|y.md", ["zebrafish"])
     assert "zebrafish" not in out
     assert "\n" not in out and "`" not in out and "|" not in out
-    assert out.startswith("dir/[redacted]-notes")
+    assert out.startswith("file-")  # a path holding a needle becomes an opaque label
 
 
 def test_needle_in_filename_is_not_printed(tmp_path):
@@ -33,7 +33,7 @@ def test_needle_in_filename_is_not_printed(tmp_path):
     r = py("gate/needles_scan.py", "--target", str(t), "--needles", str(n), "--accepted", str(a))
     assert r.returncode == 1
     assert "zebrafish" not in r.stdout + r.stderr
-    assert "[redacted]-plan.txt 1" in r.stdout
+    assert "file-" in r.stdout and "-plan.txt" not in r.stdout
 
 
 def test_gitleaks_summary_shows_only_paths_and_counts(tmp_path, monkeypatch):
@@ -55,8 +55,9 @@ def test_gitleaks_summary_shows_only_paths_and_counts(tmp_path, monkeypatch):
     monkeypatch.setattr(run_gate.subprocess, "run", fake_run)
     ok, text = run_gate.gitleaks_summary("gl", target, ["zebrafish"])
     assert ok is False
-    assert "SECRETTEXT" not in text and "zebrafish" not in text and "7" not in text.replace("total 2 in 1", "")
-    assert "a/[redacted].txt 2" in text and "total 2 in 1 file(s)" in text
+    assert "SECRETTEXT" not in text and "zebrafish" not in text and "StartLine" not in text and ":7" not in text
+    assert text.startswith("file-") and "total 2 in 1 file(s)" in text
+    assert "file-" in text and "total 2 in 1 file(s)" in text
 
 
 def test_identity_empty_history_is_an_error_not_a_pass(tmp_path):
